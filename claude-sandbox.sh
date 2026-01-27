@@ -42,6 +42,7 @@ if [ $# -gt 0 ]; then
 fi
 
 VOLUME_NAME="claude-sandbox-${PROFILE}"
+WORKSPACE_VOLUME_NAME="claude-sandbox-${PROFILE}-workspace"
 CONTAINER_NAME="claude-sandbox-${PROFILE}"
 
 # Ensure the persistent volume exists
@@ -106,6 +107,7 @@ exec docker run -it --rm \
     --cap-add=NET_ADMIN \
     --add-host=host.docker.internal:host-gateway \
     -v "$VOLUME_NAME":/home/claude \
+    -v "$WORKSPACE_VOLUME_NAME":/workspace \
     -e PULSE_SERVER=tcp:host.docker.internal:4713 \
     -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
     -e TERM="$TERM" \
