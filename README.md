@@ -63,7 +63,7 @@ All files live in `~/claude-sandbox/`:
 - **Dev tools:** git, GitHub CLI (gh), build-essential (gcc, g++, make), vim, jq, curl, wget
 - **Voice mode:** VoiceMode Python package (pre-configured for host services)
 - **Audio:** PulseAudio client (connects to host over TCP)
-- **Claude Code:** Latest version via npm
+- **Claude Code:** Latest version via native installer (rebuild image to update)
 
 ## Architecture
 

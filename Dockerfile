@@ -45,7 +45,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# Node.js 22 (required for Claude Code)
+# Node.js 22
 # ============================================================
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
@@ -71,9 +71,11 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && mv /root/.local/bin/uvx /usr/local/bin/uvx
 
 # ============================================================
-# Claude Code
+# Claude Code (native installer)
 # ============================================================
-RUN npm install -g @anthropic-ai/claude-code
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+    && cp -L /root/.local/bin/claude /usr/local/bin/claude \
+    && rm -rf /root/.local/share/claude /root/.local/bin/claude
 
 # ============================================================
 # VoiceMode (voice-mode Python package)
@@ -90,7 +92,10 @@ ENV VOICEMODE_TTS_BASE_URLS=http://host.docker.internal:8880/v1
 # User setup
 # ============================================================
 RUN useradd --create-home --shell /bin/bash claude \
-    && usermod -aG audio claude
+    && usermod -aG audio claude \
+    && mkdir -p /home/claude/.local/bin \
+    && chown -R claude:claude /home/claude/.local
+ENV PATH="/home/claude/.local/bin:$PATH"
 
 # Suppress PulseAudio shared memory warnings (not needed over TCP)
 RUN mkdir -p /home/claude/.config/pulse \
