@@ -112,4 +112,4 @@ exec docker run -it --rm \
     --hostname "$CONTAINER_NAME" \
     --name "$CONTAINER_NAME" \
     "$IMAGE_NAME" \
-    claude ${CLAUDE_ARGS[@]+"${CLAUDE_ARGS[@]}"}
+    ${CLAUDE_ARGS[@]+"${CLAUDE_ARGS[@]}"}

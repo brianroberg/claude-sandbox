@@ -108,4 +108,4 @@ RUN mkdir -p /workspace && chown claude:claude /workspace
 WORKDIR /workspace
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["claude"]
+CMD ["claude", "--dangerously-skip-permissions"]

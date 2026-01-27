@@ -20,10 +20,11 @@ claude-sandbox work           # isolated "work" environment
 claude-sandbox experiments    # isolated "experiments" environment
 ```
 
-Arguments after `--` are passed to the `claude` command:
+Arguments after `--` replace the default command entirely:
 
 ```bash
-claude-sandbox work -- --help
+claude-sandbox work -- /bin/bash       # get a shell instead of Claude Code
+claude-sandbox work -- claude --help   # run claude with specific flags
 ```
 
 ### First-time Voice Mode Setup (once per profile)
