@@ -20,6 +20,12 @@ claude-sandbox work           # isolated "work" environment
 claude-sandbox experiments    # isolated "experiments" environment
 ```
 
+**Caution:** The default command runs `claude --dangerously-skip-permissions`, which allows Claude to execute tools without asking for confirmation. This is the intended trade-off of a sandboxed environment — the container has no access to your filesystem or local network, so the permission prompts are less necessary. If you prefer the standard permission model, override with:
+
+```bash
+claude-sandbox work -- claude
+```
+
 Arguments after `--` replace the default command entirely:
 
 ```bash
