@@ -33,6 +33,12 @@ claude-sandbox work -- /bin/bash       # get a shell instead of Claude Code
 claude-sandbox work -- claude --help   # run claude with specific flags
 ```
 
+To open a second shell in an already-running container:
+
+```bash
+docker exec -it -u claude claude-sandbox-work /bin/bash
+```
+
 ### First-time Voice Mode Setup (once per profile)
 
 Inside Claude Code, install the voice mode plugin:
@@ -216,6 +222,11 @@ The PulseAudio configuration (`~/.pulse/default.pa`) also includes:
 7. **No audio playback at all:** If `PULSE_SINK` or `PULSE_SOURCE` environment variables are set to a device name that PulseAudio can't resolve, playback silently fails. The launch script does not set these variables — if they are set in your shell environment, unset them.
 
 8. **Voice mode can't reach Whisper/Kokoro:** Ensure the services are running on your Mac and ports 2022/8880 are accessible.
+
+9. **Voice playback is slow and low-pitched:** This is a sample rate mismatch, typically caused by disconnecting and reconnecting Bluetooth audio (e.g., AirPods). Restart PulseAudio on your Mac and then restart the container:
+   ```bash
+   pulseaudio --kill; sleep 1; pulseaudio --exit-idle-time=-1 --daemon
+   ```
 
 ## Rebuilding the Image
 

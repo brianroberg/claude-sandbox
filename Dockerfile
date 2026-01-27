@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     jq \
     less \
     vim \
+    openssh-client \
     # Network & firewall (for entrypoint sandbox)
     iptables \
     iproute2 \
