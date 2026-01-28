@@ -3,7 +3,9 @@
 # Launch Claude Code in a sandboxed Docker container
 # with audio forwarding and network isolation.
 #
-# Usage: claude-sandbox [profile] [-- claude-args...]
+# Usage: claude-sandbox [--github] [profile] [-- claude-args...]
+#   --github:    Enable GitHub access via SSH agent forwarding
+#                and git config from host's ~/.gitconfig.
 #   profile:     Optional name for an isolated environment.
 #                Each profile gets its own persistent storage.
 #                Defaults to "default".
@@ -11,9 +13,10 @@
 #                (everything after --).
 #
 # Examples:
-#   claude-sandbox                    # default profile
-#   claude-sandbox work               # "work" profile
-#   claude-sandbox personal           # "personal" profile
+#   claude-sandbox                    # default profile, no GitHub
+#   claude-sandbox work               # "work" profile, no GitHub
+#   claude-sandbox --github           # default profile with GitHub
+#   claude-sandbox --github work      # "work" profile with GitHub
 #   claude-sandbox work -- --help     # pass flags to claude
 # ============================================================
 
@@ -21,25 +24,39 @@ set -euo pipefail
 
 IMAGE_NAME="claude-sandbox"
 
-# Parse profile name (first arg, if it doesn't start with -)
+# Parse arguments: [--github] [profile] [-- claude-args...]
 PROFILE="default"
+ENABLE_GITHUB=false
 CLAUDE_ARGS=()
 
-if [ $# -gt 0 ]; then
-    if [ "$1" = "--" ]; then
-        shift
-        CLAUDE_ARGS=("$@")
-    elif [[ "$1" != -* ]]; then
-        PROFILE="$1"
-        shift
-        if [ $# -gt 0 ] && [ "$1" = "--" ]; then
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --github)
+            ENABLE_GITHUB=true
             shift
-        fi
-        CLAUDE_ARGS=("$@")
-    else
-        CLAUDE_ARGS=("$@")
-    fi
-fi
+            ;;
+        --)
+            shift
+            CLAUDE_ARGS=("$@")
+            break
+            ;;
+        -*)
+            # Unknown flag - pass to claude
+            CLAUDE_ARGS=("$@")
+            break
+            ;;
+        *)
+            # First non-flag arg is profile name
+            if [ "$PROFILE" = "default" ]; then
+                PROFILE="$1"
+                shift
+            else
+                CLAUDE_ARGS=("$@")
+                break
+            fi
+            ;;
+    esac
+done
 
 VOLUME_NAME="claude-sandbox-${PROFILE}"
 WORKSPACE_VOLUME_NAME="claude-sandbox-${PROFILE}-workspace"
@@ -100,6 +117,41 @@ if command -v SwitchAudioSource &>/dev/null; then
     fi
 fi
 
+# Set up GitHub access if requested
+GITHUB_DOCKER_ARGS=()
+if [ "$ENABLE_GITHUB" = true ]; then
+    # Read git config from host's ~/.gitconfig
+    GIT_USER_NAME=$(git config --global user.name 2>/dev/null || true)
+    GIT_USER_EMAIL=$(git config --global user.email 2>/dev/null || true)
+
+    if [ -z "$GIT_USER_NAME" ] || [ -z "$GIT_USER_EMAIL" ]; then
+        echo "ERROR: --github requires git config on host."
+        echo "Run these commands first:"
+        [ -z "$GIT_USER_NAME" ] && echo "  git config --global user.name \"Your Name\""
+        [ -z "$GIT_USER_EMAIL" ] && echo "  git config --global user.email \"you@example.com\""
+        exit 1
+    fi
+
+    # macOS Docker Desktop uses a special socket path for SSH agent forwarding
+    if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+        echo "ERROR: SSH agent not running. Start it with:"
+        echo "  eval \$(ssh-agent -s)"
+        echo "  ssh-add ~/.ssh/your_github_key"
+        exit 1
+    fi
+
+    GITHUB_DOCKER_ARGS=(
+        -v /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
+        -e SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock
+        -e GIT_AUTHOR_NAME="$GIT_USER_NAME"
+        -e GIT_AUTHOR_EMAIL="$GIT_USER_EMAIL"
+        -e GIT_COMMITTER_NAME="$GIT_USER_NAME"
+        -e GIT_COMMITTER_EMAIL="$GIT_USER_EMAIL"
+    )
+
+    echo "GitHub access: enabled (git user: $GIT_USER_NAME <$GIT_USER_EMAIL>)"
+fi
+
 echo "Launching Claude sandbox (profile: $PROFILE)"
 
 # Set up folder with container icon for Terminal.app title bar
@@ -124,6 +176,7 @@ exec docker run -it --rm \
     -e PULSE_SERVER=tcp:host.docker.internal:4713 \
     -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
     -e TERM="$TERM" \
+    ${GITHUB_DOCKER_ARGS[@]+"${GITHUB_DOCKER_ARGS[@]}"} \
     --hostname "$CONTAINER_NAME" \
     --name "$CONTAINER_NAME" \
     "$IMAGE_NAME" \

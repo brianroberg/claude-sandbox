@@ -11,13 +11,15 @@ A Docker-based sandboxed environment for running Claude Code with voice mode (vi
 - Allows public internet access
 - Supports multiple named profiles with separate persistent storage
 - Drops root privileges after setting up the firewall
+- Optional GitHub access via SSH agent forwarding (private key stays on host)
 
 ## Quick Start
 
 ```bash
-claude-sandbox                # default profile
+claude-sandbox                # default profile (no GitHub access)
 claude-sandbox work           # isolated "work" environment
-claude-sandbox experiments    # isolated "experiments" environment
+claude-sandbox --github       # default profile with GitHub access
+claude-sandbox --github work  # "work" profile with GitHub access
 ```
 
 **Caution:** The default command runs `claude --dangerously-skip-permissions`, which allows Claude to execute tools without asking for confirmation. This is the intended trade-off of a sandboxed environment — the container has no access to your filesystem or local network, so the permission prompts are less necessary. If you prefer the standard permission model, override with:
@@ -112,6 +114,57 @@ The container's firewall (set via iptables in the entrypoint) enforces:
 | Link-local (169.254.x.x) | Blocked |
 
 After the firewall rules are set, the process drops to the unprivileged `claude` user who cannot modify the rules.
+
+## GitHub Access
+
+By default, containers have no GitHub access — they can't push or pull from private repos, and git commits won't have your identity. This is intentional: most sandbox sessions don't need GitHub, and keeping credentials out reduces risk.
+
+Use the `--github` flag to enable GitHub access:
+
+```bash
+claude-sandbox --github
+claude-sandbox --github work
+```
+
+### How It Works
+
+- **SSH Agent Forwarding:** Your private SSH key stays on your Mac. Docker forwards the SSH agent socket into the container, so `git` operations authenticate without copying your key.
+- **Git Identity:** Your `user.name` and `user.email` are read from your Mac's `~/.gitconfig` and passed as environment variables.
+
+### Prerequisites
+
+Before using `--github`, ensure your Mac has:
+
+1. **Git config set:**
+   ```bash
+   git config --global user.name "Your Name"
+   git config --global user.email "you@example.com"
+   ```
+
+2. **SSH key added to your agent:**
+   ```bash
+   ssh-add ~/.ssh/your_github_key
+   ```
+
+   On macOS, the SSH agent usually runs automatically. You may need to re-add your key after a reboot (or configure your keychain to persist it).
+
+3. **SSH key registered with GitHub:** The public key must be added to your GitHub account at https://github.com/settings/keys.
+
+### Verifying GitHub Access
+
+Inside a `--github` container:
+
+```bash
+# Test SSH connection to GitHub
+ssh -T git@github.com
+
+# Check git identity
+git config user.name
+git config user.email
+
+# Clone a private repo
+git clone git@github.com:yourname/private-repo.git
+```
 
 ## Persistent Storage
 
