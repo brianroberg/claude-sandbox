@@ -103,15 +103,15 @@ fi
 echo "Launching Claude sandbox (profile: $PROFILE)"
 
 # Set up folder with container icon for Terminal.app title bar
-# The folder is named after the container so Terminal shows the container name
-TITLE_DIR="/tmp/$CONTAINER_NAME"
+# The folder is named after the profile so Terminal shows just the profile name
+TITLE_DIR="/tmp/claude-sandbox/$PROFILE"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ ! -d "$TITLE_DIR" ]; then
     mkdir -p "$TITLE_DIR"
     npx -y fileicon set "$TITLE_DIR" "$SCRIPT_DIR/container.icns" 2>/dev/null || true
 fi
 
-# Set Terminal.app's working directory display to show Docker icon and container name
+# Set Terminal.app's working directory display to show container icon and profile name
 # (OSC 7 escape sequence with file: URL)
 printf '\033]7;file://localhost%s\007' "$TITLE_DIR"
 
