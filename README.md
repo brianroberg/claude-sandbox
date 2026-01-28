@@ -39,16 +39,20 @@ To open a second shell in an already-running container:
 docker exec -it -u claude claude-sandbox-work /bin/bash
 ```
 
-### First-time Voice Mode Setup (once per profile)
+### Voice Mode
 
-Inside Claude Code, install the voice mode plugin:
+The VoiceMode plugin is automatically installed on first startup (after you've authenticated Claude Code). If auto-install fails (e.g., on first launch before auth), it will retry on subsequent startups.
 
-1. Type `/mcp` to open MCP settings
-2. Add the `mbailey` marketplace (source: GitHub, repo: `mbailey/plugins`)
-3. Install the `voicemode` plugin
-4. Restart Claude Code (`/exit` then relaunch)
+To verify the plugin is installed, run `/mcp` inside Claude Code — you should see `voicemode` listed and connected.
 
-This persists in the profile's volume -- you only do it once.
+**Manual installation (if needed):**
+
+```bash
+claude plugin marketplace add mbailey/plugins
+claude plugin install voicemode@mbailey
+```
+
+Plugin configuration persists in the profile's volume.
 
 ## Files
 

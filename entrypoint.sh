@@ -84,5 +84,23 @@ chown -R claude:claude /home/claude
 mkdir -p /workspace
 chown claude:claude /workspace
 
+# Install VoiceMode plugin if not already done
+# Uses a marker file since the plugin commands require auth (may fail on first run)
+VOICEMODE_MARKER="/home/claude/.voicemode/.plugin-installed"
+if [ ! -f "$VOICEMODE_MARKER" ]; then
+    echo "Installing VoiceMode plugin..."
+    if runuser -u claude -- claude plugin marketplace add mbailey/plugins 2>/dev/null; then
+        if runuser -u claude -- claude plugin install voicemode@mbailey 2>/dev/null; then
+            touch "$VOICEMODE_MARKER"
+            chown claude:claude "$VOICEMODE_MARKER"
+            echo "VoiceMode plugin installed successfully."
+        else
+            echo "Note: VoiceMode plugin install failed (auth may be required). Will retry next startup."
+        fi
+    else
+        echo "Note: Could not add plugin marketplace (auth may be required). Will retry next startup."
+    fi
+fi
+
 # Drop to non-root user (non-root user cannot modify iptables)
 exec runuser -u claude -- "$@"
