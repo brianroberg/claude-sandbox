@@ -102,13 +102,13 @@ fi
 
 echo "Launching Claude sandbox (profile: $PROFILE)"
 
-# Set up folder with Docker icon for Terminal.app title bar
+# Set up folder with container icon for Terminal.app title bar
 # The folder is named after the container so Terminal shows the container name
 TITLE_DIR="/tmp/$CONTAINER_NAME"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ ! -d "$TITLE_DIR" ]; then
     mkdir -p "$TITLE_DIR"
-    npx -y fileicon set "$TITLE_DIR" "$SCRIPT_DIR/docker-icon.icns" 2>/dev/null || true
+    npx -y fileicon set "$TITLE_DIR" "$SCRIPT_DIR/container.icns" 2>/dev/null || true
 fi
 
 # Set Terminal.app's working directory display to show Docker icon and container name
