@@ -3,36 +3,43 @@
 # Launch Claude Code in a sandboxed Docker container
 # with audio forwarding and network isolation.
 #
-# Usage: claude-sandbox [--github] [profile] [-- claude-args...]
+# Usage: claude-sandbox [--github] [--detach|-d] [profile] [-- command...]
 #   --github:    Enable GitHub access via SSH agent forwarding
 #                and git config from host's ~/.gitconfig.
+#   --detach|-d: Start container in background and return to host shell.
+#                Container runs 'sleep infinity'; attach with docker exec.
 #   profile:     Optional name for an isolated environment.
 #                Each profile gets its own persistent storage.
 #                Defaults to "default".
-#   claude-args: Arguments passed through to the claude command
-#                (everything after --).
+#   command:     Command to run instead of claude (everything after --).
 #
 # Examples:
 #   claude-sandbox                    # default profile, no GitHub
 #   claude-sandbox work               # "work" profile, no GitHub
 #   claude-sandbox --github           # default profile with GitHub
 #   claude-sandbox --github work      # "work" profile with GitHub
-#   claude-sandbox work -- --help     # pass flags to claude
+#   claude-sandbox -d work            # start detached, attach later
+#   claude-sandbox work -- /bin/bash  # run shell instead of claude
 # ============================================================
 
 set -euo pipefail
 
 IMAGE_NAME="claude-sandbox"
 
-# Parse arguments: [--github] [profile] [-- claude-args...]
+# Parse arguments: [--github] [--detach|-d] [profile] [-- command...]
 PROFILE="default"
 ENABLE_GITHUB=false
+DETACH_MODE=false
 CLAUDE_ARGS=()
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --github)
             ENABLE_GITHUB=true
+            shift
+            ;;
+        --detach|-d)
+            DETACH_MODE=true
             shift
             ;;
         --)
@@ -83,6 +90,13 @@ if ! docker image inspect "$IMAGE_NAME" &>/dev/null; then
     echo "Docker image '$IMAGE_NAME' not found. Building..."
     SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
     docker build -t "$IMAGE_NAME" "$SCRIPT_DIR"
+fi
+
+# Check if container already exists (would cause naming conflict)
+if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    echo "ERROR: Container '$CONTAINER_NAME' already exists."
+    echo "Stop it first with: docker stop $CONTAINER_NAME"
+    exit 1
 fi
 
 # Sync PulseAudio defaults with macOS active audio devices and
@@ -152,32 +166,53 @@ if [ "$ENABLE_GITHUB" = true ]; then
     echo "GitHub access: enabled (git user: $GIT_USER_NAME <$GIT_USER_EMAIL>)"
 fi
 
-echo "Launching Claude sandbox (profile: $PROFILE)"
-
-# Set up folder with container icon for Terminal.app title bar
-# The folder is named after the profile so Terminal shows just the profile name
-TITLE_DIR="/tmp/claude-sandbox/$PROFILE"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-if [ ! -d "$TITLE_DIR" ]; then
-    mkdir -p "$TITLE_DIR"
-    npx -y fileicon set "$TITLE_DIR" "$SCRIPT_DIR/container.icns" 2>/dev/null || true
-fi
-
-# Set Terminal.app's working directory display to show container icon and profile name
-# (OSC 7 escape sequence with file: URL)
-printf '\033]7;file://localhost%s\007' "$TITLE_DIR"
+# Common Docker run arguments
+DOCKER_ARGS=(
+    --rm
+    --cap-add=NET_ADMIN
+    --add-host=host.docker.internal:host-gateway
+    -v "$VOLUME_NAME":/home/claude
+    -v "$WORKSPACE_VOLUME_NAME":/workspace
+    -e PULSE_SERVER=tcp:host.docker.internal:4713
+    -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
+    -e TERM="$TERM"
+    ${GITHUB_DOCKER_ARGS[@]+"${GITHUB_DOCKER_ARGS[@]}"}
+    --hostname "$CONTAINER_NAME"
+    --name "$CONTAINER_NAME"
+)
 
 # Launch the container
-exec docker run -it --rm \
-    --cap-add=NET_ADMIN \
-    --add-host=host.docker.internal:host-gateway \
-    -v "$VOLUME_NAME":/home/claude \
-    -v "$WORKSPACE_VOLUME_NAME":/workspace \
-    -e PULSE_SERVER=tcp:host.docker.internal:4713 \
-    -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
-    -e TERM="$TERM" \
-    ${GITHUB_DOCKER_ARGS[@]+"${GITHUB_DOCKER_ARGS[@]}"} \
-    --hostname "$CONTAINER_NAME" \
-    --name "$CONTAINER_NAME" \
-    "$IMAGE_NAME" \
-    ${CLAUDE_ARGS[@]+"${CLAUDE_ARGS[@]}"}
+if [ "$DETACH_MODE" = true ]; then
+    echo "Starting Claude sandbox in detached mode (profile: $PROFILE)"
+    if ! docker run -d "${DOCKER_ARGS[@]}" "$IMAGE_NAME" sleep infinity >/dev/null; then
+        echo "ERROR: Failed to start container."
+        exit 1
+    fi
+    echo "Container '$CONTAINER_NAME' is running."
+    echo ""
+    echo "To use Claude:"
+    echo "  docker exec -it -u claude $CONTAINER_NAME claude --dangerously-skip-permissions"
+    echo ""
+    echo "To open a shell:"
+    echo "  docker exec -it -u claude $CONTAINER_NAME /bin/bash"
+    echo ""
+    echo "To stop:"
+    echo "  docker stop $CONTAINER_NAME"
+else
+    echo "Launching Claude sandbox (profile: $PROFILE)"
+
+    # Set up folder with container icon for Terminal.app title bar
+    # The folder is named after the profile so Terminal shows just the profile name
+    TITLE_DIR="/tmp/claude-sandbox/$PROFILE"
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    if [ ! -d "$TITLE_DIR" ]; then
+        mkdir -p "$TITLE_DIR"
+        npx -y fileicon set "$TITLE_DIR" "$SCRIPT_DIR/container.icns" 2>/dev/null || true
+    fi
+
+    # Set Terminal.app's working directory display to show container icon and profile name
+    # (OSC 7 escape sequence with file: URL)
+    printf '\033]7;file://localhost%s\007' "$TITLE_DIR"
+
+    exec docker run -it "${DOCKER_ARGS[@]}" "$IMAGE_NAME" ${CLAUDE_ARGS[@]+"${CLAUDE_ARGS[@]}"}
+fi
