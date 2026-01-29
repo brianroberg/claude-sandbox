@@ -102,5 +102,10 @@ if [ ! -f "$VOICEMODE_MARKER" ]; then
     fi
 fi
 
+# Fix SSH agent socket permissions if mounted (for --github mode)
+if [ -S /run/host-services/ssh-auth.sock ]; then
+    chmod 666 /run/host-services/ssh-auth.sock
+fi
+
 # Drop to non-root user (non-root user cannot modify iptables)
 exec runuser -u claude -- "$@"
