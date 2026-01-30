@@ -16,10 +16,12 @@ A Docker-based sandboxed environment for running Claude Code with voice mode (vi
 ## Quick Start
 
 ```bash
-claude-sandbox                # default profile (no GitHub access)
-claude-sandbox work           # isolated "work" environment
-claude-sandbox --github       # default profile with GitHub access
-claude-sandbox --github work  # "work" profile with GitHub access
+claude-sandbox                      # default profile (no GitHub access)
+claude-sandbox work                 # isolated "work" environment
+claude-sandbox --github             # default profile with GitHub access
+claude-sandbox --github work        # "work" profile with GitHub access
+claude-sandbox --host-port 8080     # allow access to host port 8080
+claude-sandbox --host-port 8080 work # "work" profile with host port
 ```
 
 **Caution:** The default command runs `claude --dangerously-skip-permissions`, which allows Claude to execute tools without asking for confirmation. This is the intended trade-off of a sandboxed environment — the container has no access to your filesystem or local network, so the permission prompts are less necessary. If you prefer the standard permission model, override with:
@@ -108,12 +110,34 @@ The container's firewall (set via iptables in the entrypoint) enforces:
 | Host PulseAudio (port 4713) | Yes |
 | Host Whisper STT (port 2022) | Yes |
 | Host Kokoro TTS (port 8880) | Yes |
+| Custom host ports (via `--host-port`) | Yes |
 | DNS servers (Docker-configured) | Yes |
 | Local network (192.168.x.x, 10.x.x.x, 172.16.x.x) | Blocked |
 | Other host ports | Blocked |
 | Link-local (169.254.x.x) | Blocked |
 
 After the firewall rules are set, the process drops to the unprivileged `claude` user who cannot modify the rules.
+
+### Opening Custom Host Ports
+
+By default, the container can only access specific ports on the host (PulseAudio, Whisper, Kokoro). If you're developing agents or services that need to communicate with a service running on your Mac, use the `--host-port` flag:
+
+```bash
+claude-sandbox --host-port 8080                     # single port
+claude-sandbox --host-port 8080 --host-port 9000    # multiple ports
+claude-sandbox --host-port 8080 work                # with profile
+```
+
+Inside the container, connect to the host service via `host.docker.internal`:
+
+```bash
+curl http://host.docker.internal:8080
+```
+
+This is useful for:
+- Testing agents that interact with local MCP servers
+- Developing services that communicate with databases running on the host
+- Any workflow requiring container-to-host communication on specific ports
 
 ## GitHub Access
 

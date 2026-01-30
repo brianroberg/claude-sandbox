@@ -3,11 +3,13 @@
 # Launch Claude Code in a sandboxed Docker container
 # with audio forwarding and network isolation.
 #
-# Usage: claude-sandbox [--github] [--detach|-d] [profile] [-- command...]
+# Usage: claude-sandbox [--github] [--detach|-d] [--host-port PORT]... [profile] [-- command...]
 #   --github:    Enable GitHub access via SSH agent forwarding
 #                and git config from host's ~/.gitconfig.
 #   --detach|-d: Start container in background and return to host shell.
 #                Container runs 'sleep infinity'; attach with docker exec.
+#   --host-port PORT: Allow container to connect to specified port on host.
+#                Can be repeated for multiple ports. Port must be 1-65535.
 #   profile:     Optional name for an isolated environment.
 #                Each profile gets its own persistent storage.
 #                Defaults to "default".
@@ -19,6 +21,7 @@
 #   claude-sandbox --github           # default profile with GitHub
 #   claude-sandbox --github work      # "work" profile with GitHub
 #   claude-sandbox -d work            # start detached, attach later
+#   claude-sandbox --host-port 8080   # allow access to host port 8080
 #   claude-sandbox work -- /bin/bash  # run shell instead of claude
 # ============================================================
 
@@ -26,10 +29,11 @@ set -euo pipefail
 
 IMAGE_NAME="claude-sandbox"
 
-# Parse arguments: [--github] [--detach|-d] [profile] [-- command...]
+# Parse arguments: [--github] [--detach|-d] [--host-port PORT]... [profile] [-- command...]
 PROFILE="default"
 ENABLE_GITHUB=false
 DETACH_MODE=false
+HOST_PORTS=()
 CLAUDE_ARGS=()
 
 while [ $# -gt 0 ]; do
@@ -41,6 +45,19 @@ while [ $# -gt 0 ]; do
         --detach|-d)
             DETACH_MODE=true
             shift
+            ;;
+        --host-port)
+            if [ $# -lt 2 ]; then
+                echo "ERROR: --host-port requires a port number"
+                exit 1
+            fi
+            PORT="$2"
+            if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+                echo "ERROR: Invalid port '$PORT'. Must be 1-65535."
+                exit 1
+            fi
+            HOST_PORTS+=("$PORT")
+            shift 2
             ;;
         --)
             shift
@@ -176,6 +193,7 @@ DOCKER_ARGS=(
     -e PULSE_SERVER=tcp:host.docker.internal:4713
     -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
     -e TERM="$TERM"
+    -e HOST_PORTS="${HOST_PORTS[*]}"
     ${GITHUB_DOCKER_ARGS[@]+"${GITHUB_DOCKER_ARGS[@]}"}
     --hostname "$CONTAINER_NAME"
     --name "$CONTAINER_NAME"

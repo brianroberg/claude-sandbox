@@ -36,7 +36,8 @@ done
 # PulseAudio (audio forwarding): port 4713
 # Whisper (STT, Metal GPU):      port 2022
 # Kokoro (TTS, Metal GPU):       port 8880
-for port in 4713 2022 8880; do
+# Plus any custom ports from --host-port flags
+for port in 4713 2022 8880 ${HOST_PORTS:-}; do
     iptables -A OUTPUT -p tcp -d "$HOST_IP" --dport "$port" -j ACCEPT
 done
 
@@ -51,7 +52,11 @@ iptables -A OUTPUT -j ACCEPT
 
 echo "Firewall configured:"
 echo "  Host IP: $HOST_IP"
-echo "  Allowed: DNS, PulseAudio (:4713), Whisper (:2022), Kokoro (:8880), public internet"
+ALLOWED_PORTS="DNS, PulseAudio (:4713), Whisper (:2022), Kokoro (:8880)"
+if [ -n "${HOST_PORTS:-}" ]; then
+    ALLOWED_PORTS="$ALLOWED_PORTS, custom (:${HOST_PORTS// /, :})"
+fi
+echo "  Allowed: $ALLOWED_PORTS, public internet"
 echo "  Blocked: all private/LAN ranges"
 echo ""
 
