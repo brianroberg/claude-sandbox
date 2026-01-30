@@ -138,7 +138,7 @@ def run_sandbox(args: Args) -> None:
         subprocess.run(cmd, check=False)
 
 
-@click.command()
+@click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("profile", default="default", required=False)
 @click.option(
     "--github",

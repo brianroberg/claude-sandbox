@@ -113,6 +113,12 @@ class TestClickCli:
         assert "--detach" in result.output
         assert "--host-port" in result.output
 
+    def test_help_short_option(self, runner):
+        """-h shows usage information."""
+        result = runner.invoke(main, ["-h"])
+        assert result.exit_code == 0
+        assert "Launch Claude Code" in result.output
+
 
 class TestFunctionalBasicFlow:
     """Test basic sandbox launch flow."""
