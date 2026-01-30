@@ -16,6 +16,8 @@ A Docker-based sandboxed environment for running Claude Code with voice mode (vi
 ## Quick Start
 
 ```bash
+uv tool install ~/claude-sandbox    # install globally (one-time)
+
 claude-sandbox                      # default profile (no GitHub access)
 claude-sandbox work                 # isolated "work" environment
 claude-sandbox --github             # default profile with GitHub access
@@ -57,28 +59,6 @@ claude plugin install voicemode@mbailey
 ```
 
 Plugin configuration persists in the profile's volume.
-
-## Installation
-
-The launch script is a Python package. Install it with [uv](https://docs.astral.sh/uv/):
-
-```bash
-cd ~/claude-sandbox
-uv sync
-```
-
-Then run with:
-
-```bash
-uv run claude-sandbox [options] [profile]
-```
-
-Or install globally:
-
-```bash
-uv tool install ~/claude-sandbox
-claude-sandbox [options] [profile]
-```
 
 ## Files
 
