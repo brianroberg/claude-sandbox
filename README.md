@@ -58,6 +58,28 @@ claude plugin install voicemode@mbailey
 
 Plugin configuration persists in the profile's volume.
 
+## Installation
+
+The launch script is a Python package. Install it with [uv](https://docs.astral.sh/uv/):
+
+```bash
+cd ~/claude-sandbox
+uv sync
+```
+
+Then run with:
+
+```bash
+uv run claude-sandbox [options] [profile]
+```
+
+Or install globally:
+
+```bash
+uv tool install ~/claude-sandbox
+claude-sandbox [options] [profile]
+```
+
 ## Files
 
 All files live in `~/claude-sandbox/`:
@@ -66,7 +88,8 @@ All files live in `~/claude-sandbox/`:
 |------|---------|
 | `Dockerfile` | Container image definition (Ubuntu 24.04 + dev tools) |
 | `entrypoint.sh` | Firewall setup, capability drop, user switch |
-| `claude-sandbox.sh` | Launch script with profile support |
+| `src/claude_sandbox/` | Python package (CLI, Docker ops, audio/GitHub setup) |
+| `tests/` | Unit and functional tests (76 tests) |
 | `setup-host-audio.sh` | One-time PulseAudio setup on your Mac |
 | `verify-sandbox.sh` | Run inside container to test isolation |
 
@@ -326,7 +349,22 @@ Alternatively, set `ANTHROPIC_API_KEY` in your shell environment before launchin
 ## Requirements
 
 - macOS with Docker Desktop
+- Python 3.14+ and [uv](https://docs.astral.sh/uv/) (`brew install uv`)
 - Homebrew (for PulseAudio and SwitchAudioSource)
 - `switchaudio-osx` (`brew install switchaudio-osx`) — for automatic audio device detection
 - Whisper and Kokoro services running on your Mac (for voice mode)
 - An Anthropic account or API key
+
+## Development
+
+Run tests:
+
+```bash
+uv run pytest
+```
+
+Lint:
+
+```bash
+uv run ruff check src/ tests/
+```
