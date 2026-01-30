@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Launch Claude Code in a sandboxed Docker container with audio forwarding and network isolation"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = ["click>=8.0"]
 
 [project.scripts]
 claude-sandbox = "claude_sandbox.cli:main"

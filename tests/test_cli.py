@@ -4,7 +4,9 @@ import subprocess
 import sys
 
 import pytest
+from click.testing import CliRunner
 
+from claude_sandbox.args import Args
 from claude_sandbox.cli import main, run_sandbox
 
 
@@ -18,7 +20,7 @@ class TestRunSandbox:
         mock_print = mocker.patch("builtins.print")
 
         with pytest.raises(SystemExit) as exc_info:
-            run_sandbox([])
+            run_sandbox(Args())
 
         assert exc_info.value.code == 1
         mock_print.assert_any_call("ERROR: Could not start PulseAudio.", file=sys.stderr)
@@ -35,7 +37,7 @@ class TestRunSandbox:
         mocker.patch("os.environ.get", return_value="test-key")
         mocker.patch("subprocess.run")
 
-        run_sandbox([])
+        run_sandbox(Args())
 
         mock_start.assert_called_once()
 
@@ -51,7 +53,7 @@ class TestRunSandbox:
         mocker.patch("os.environ.get", return_value="test-key")
         mocker.patch("subprocess.run")
 
-        run_sandbox([])
+        run_sandbox(Args())
 
         mock_build.assert_called_once()
 
@@ -64,7 +66,7 @@ class TestRunSandbox:
         mock_print = mocker.patch("builtins.print")
 
         with pytest.raises(SystemExit) as exc_info:
-            run_sandbox([])
+            run_sandbox(Args())
 
         assert exc_info.value.code == 1
         mock_print.assert_any_call("ERROR: Failed to build Docker image.", file=sys.stderr)
@@ -77,7 +79,7 @@ class TestRunSandbox:
         mock_print = mocker.patch("builtins.print")
 
         with pytest.raises(SystemExit) as exc_info:
-            run_sandbox(["work"])
+            run_sandbox(Args(profile="work"))
 
         assert exc_info.value.code == 1
         assert any(
@@ -99,7 +101,7 @@ class TestRunSandbox:
         mock_print = mocker.patch("builtins.print")
 
         with pytest.raises(SystemExit) as exc_info:
-            run_sandbox(["--github"])
+            run_sandbox(Args(enable_github=True))
 
         assert exc_info.value.code == 1
         assert any(
@@ -118,7 +120,7 @@ class TestRunSandbox:
         mocker.patch("os.environ.get", return_value="test-key")
         mocker.patch("subprocess.run")
 
-        run_sandbox(["work"])
+        run_sandbox(Args(profile="work"))
 
         # Should be called twice: once for home, once for workspace
         assert mock_ensure.call_count == 2
@@ -137,7 +139,7 @@ class TestRunSandbox:
         mocker.patch("os.environ.get", return_value="test-key")
         mock_run = mocker.patch("subprocess.run")
 
-        run_sandbox([])
+        run_sandbox(Args())
 
         mock_run.assert_called_once()
         args = mock_run.call_args[0][0]
@@ -158,7 +160,7 @@ class TestRunSandbox:
         mock_run.return_value = subprocess.CompletedProcess([], 0)
         mocker.patch("builtins.print")
 
-        run_sandbox(["--detach"])
+        run_sandbox(Args(detach_mode=True))
 
         mock_run.assert_called_once()
         args = mock_run.call_args[0][0]
@@ -169,11 +171,15 @@ class TestRunSandbox:
 class TestMain:
     """Test the main entry point."""
 
-    def test_calls_run_sandbox_with_sys_argv(self, mocker):
-        """Main calls run_sandbox with sys.argv[1:]."""
+    def test_main_invokes_click_command(self, mocker):
+        """Main is a click command that calls run_sandbox."""
+        runner = CliRunner()
         mock_run = mocker.patch("claude_sandbox.cli.run_sandbox")
-        mocker.patch.object(sys, "argv", ["claude-sandbox", "--github", "work"])
 
-        main()
+        result = runner.invoke(main, ["--github", "work"])
 
-        mock_run.assert_called_once_with(["--github", "work"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert args.profile == "work"
+        assert args.enable_github is True

@@ -5,7 +5,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from claude_sandbox.args import parse_args
+import click
+
+from claude_sandbox.args import Args
 from claude_sandbox.docker import (
     build_docker_args,
     build_image,
@@ -32,13 +34,12 @@ def get_script_dir() -> str:
     return str(Path(__file__).parent.parent.parent)
 
 
-def run_sandbox(argv: list[str]) -> None:
+def run_sandbox(args: Args) -> None:
     """Run the Claude sandbox.
 
     Args:
-        argv: Command-line arguments (without program name).
+        args: Parsed command-line arguments.
     """
-    args = parse_args(argv)
     script_dir = get_script_dir()
 
     # Ensure PulseAudio is running
@@ -76,8 +77,12 @@ def run_sandbox(argv: list[str]) -> None:
 
     # Ensure volumes exist
     print(f"Creating persistent volume '{args.volume_name}' for profile '{args.profile}'...")
-    ensure_volume_exists(args.volume_name)
-    ensure_volume_exists(args.workspace_volume_name)
+    if not ensure_volume_exists(args.volume_name):
+        print(f"ERROR: Failed to create volume '{args.volume_name}'.", file=sys.stderr)
+        sys.exit(1)
+    if not ensure_volume_exists(args.workspace_volume_name):
+        print(f"ERROR: Failed to create volume '{args.workspace_volume_name}'.", file=sys.stderr)
+        sys.exit(1)
 
     # Sync audio devices
     output_dev, input_dev = get_macos_audio_devices()
@@ -113,6 +118,8 @@ def run_sandbox(argv: list[str]) -> None:
         result = subprocess.run(cmd, capture_output=True, check=False)
         if result.returncode != 0:
             print("ERROR: Failed to start container.", file=sys.stderr)
+            if result.stderr:
+                print(result.stderr.decode().strip(), file=sys.stderr)
             sys.exit(1)
         print(f"Container '{args.container_name}' is running.")
         print()
@@ -127,12 +134,39 @@ def run_sandbox(argv: list[str]) -> None:
         print(f"  docker stop {args.container_name}")
     else:
         print(f"Launching Claude sandbox (profile: {args.profile})")
-        cmd = ["docker", "run", "-it", *docker_args, IMAGE_NAME]
-        if args.command:
-            cmd.extend(args.command)
+        cmd = ["docker", "run", "-it", *docker_args, IMAGE_NAME, "/bin/bash"]
         subprocess.run(cmd, check=False)
 
 
-def main() -> None:
-    """Main entry point."""
-    run_sandbox(sys.argv[1:])
+@click.command()
+@click.argument("profile", default="default", required=False)
+@click.option(
+    "--github",
+    is_flag=True,
+    help="Enable GitHub access via SSH agent forwarding",
+)
+@click.option(
+    "--detach",
+    "-d",
+    is_flag=True,
+    help="Start container in background and return to host shell",
+)
+@click.option(
+    "--host-port",
+    multiple=True,
+    type=click.IntRange(1, 65535),
+    metavar="PORT",
+    help="Allow container to connect to specified port on host (can be repeated)",
+)
+def main(profile: str, github: bool, detach: bool, host_port: tuple[int, ...]) -> None:
+    """Launch Claude Code in a sandboxed Docker container.
+
+    PROFILE is the profile name for isolated environment (default: 'default').
+    """
+    args = Args(
+        profile=profile,
+        enable_github=github,
+        detach_mode=detach,
+        host_ports=list(host_port),
+    )
+    run_sandbox(args)

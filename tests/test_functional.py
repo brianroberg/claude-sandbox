@@ -3,8 +3,115 @@
 import subprocess
 
 import pytest
+from click.testing import CliRunner
 
-from claude_sandbox.cli import run_sandbox
+from claude_sandbox.args import Args
+from claude_sandbox.cli import main, run_sandbox
+
+
+class TestClickCli:
+    """Test click CLI argument parsing."""
+
+    @pytest.fixture
+    def runner(self):
+        """Create a Click CLI test runner."""
+        return CliRunner()
+
+    def test_no_args_uses_defaults(self, runner, mocker):
+        """With no arguments, uses default profile."""
+        mocker.patch("claude_sandbox.cli.run_sandbox")
+        result = runner.invoke(main, [])
+        assert result.exit_code == 0
+
+    def test_profile_argument(self, runner, mocker):
+        """Profile can be specified as positional argument."""
+        mock_run = mocker.patch("claude_sandbox.cli.run_sandbox")
+        result = runner.invoke(main, ["work"])
+        assert result.exit_code == 0
+        args = mock_run.call_args[0][0]
+        assert args.profile == "work"
+
+    def test_github_flag(self, runner, mocker):
+        """--github flag enables GitHub access."""
+        mock_run = mocker.patch("claude_sandbox.cli.run_sandbox")
+        result = runner.invoke(main, ["--github"])
+        assert result.exit_code == 0
+        args = mock_run.call_args[0][0]
+        assert args.enable_github is True
+
+    def test_detach_long_flag(self, runner, mocker):
+        """--detach flag enables detached mode."""
+        mock_run = mocker.patch("claude_sandbox.cli.run_sandbox")
+        result = runner.invoke(main, ["--detach"])
+        assert result.exit_code == 0
+        args = mock_run.call_args[0][0]
+        assert args.detach_mode is True
+
+    def test_detach_short_flag(self, runner, mocker):
+        """-d flag enables detached mode."""
+        mock_run = mocker.patch("claude_sandbox.cli.run_sandbox")
+        result = runner.invoke(main, ["-d"])
+        assert result.exit_code == 0
+        args = mock_run.call_args[0][0]
+        assert args.detach_mode is True
+
+    def test_single_host_port(self, runner, mocker):
+        """--host-port adds a port to the list."""
+        mock_run = mocker.patch("claude_sandbox.cli.run_sandbox")
+        result = runner.invoke(main, ["--host-port", "8080"])
+        assert result.exit_code == 0
+        args = mock_run.call_args[0][0]
+        assert args.host_ports == [8080]
+
+    def test_multiple_host_ports(self, runner, mocker):
+        """Multiple --host-port flags accumulate."""
+        mock_run = mocker.patch("claude_sandbox.cli.run_sandbox")
+        result = runner.invoke(main, ["--host-port", "8080", "--host-port", "3000"])
+        assert result.exit_code == 0
+        args = mock_run.call_args[0][0]
+        assert args.host_ports == [8080, 3000]
+
+    def test_host_port_invalid_value_fails(self, runner, mocker):
+        """--host-port with non-numeric value fails."""
+        mocker.patch("claude_sandbox.cli.run_sandbox")
+        result = runner.invoke(main, ["--host-port", "abc"])
+        assert result.exit_code != 0
+
+    def test_host_port_out_of_range_fails(self, runner, mocker):
+        """--host-port with port outside 1-65535 fails."""
+        mocker.patch("claude_sandbox.cli.run_sandbox")
+
+        result = runner.invoke(main, ["--host-port", "0"])
+        assert result.exit_code != 0
+
+        result = runner.invoke(main, ["--host-port", "65536"])
+        assert result.exit_code != 0
+
+    def test_all_options_combined(self, runner, mocker):
+        """All options work together correctly."""
+        mock_run = mocker.patch("claude_sandbox.cli.run_sandbox")
+        result = runner.invoke(main, [
+            "--github",
+            "-d",
+            "--host-port", "8080",
+            "--host-port", "3000",
+            "myproject",
+        ])
+        assert result.exit_code == 0
+        args = mock_run.call_args[0][0]
+        assert args.profile == "myproject"
+        assert args.enable_github is True
+        assert args.detach_mode is True
+        assert args.host_ports == [8080, 3000]
+
+    def test_help_option(self, runner):
+        """--help shows usage information."""
+        result = runner.invoke(main, ["--help"])
+        assert result.exit_code == 0
+        assert "Launch Claude Code" in result.output
+        assert "--github" in result.output
+        assert "--detach" in result.output
+        assert "--host-port" in result.output
 
 
 class TestFunctionalBasicFlow:
@@ -29,51 +136,36 @@ class TestFunctionalBasicFlow:
 
     def test_default_profile_launches_correctly(self, mock_all_externals, capsys):
         """Default profile launches with expected Docker arguments."""
-        run_sandbox([])
+        args = Args()
+        run_sandbox(args)
 
         mock_all_externals.assert_called_once()
-        args = mock_all_externals.call_args[0][0]
+        cmd = mock_all_externals.call_args[0][0]
 
         # Verify it's a docker run command
-        assert args[0] == "docker"
-        assert args[1] == "run"
-        assert "-it" in args
+        assert cmd[0] == "docker"
+        assert cmd[1] == "run"
+        assert "-it" in cmd
 
         # Verify default profile names
-        assert any("claude-sandbox-default:/home/claude" in arg for arg in args)
-        assert any("claude-sandbox-default-workspace:/workspace" in arg for arg in args)
+        assert any("claude-sandbox-default:/home/claude" in arg for arg in cmd)
+        assert any("claude-sandbox-default-workspace:/workspace" in arg for arg in cmd)
 
-        # Verify image name at end
-        assert "claude-sandbox" in args
+        # Verify image name and /bin/bash at end
+        assert "claude-sandbox" in cmd
+        assert cmd[-1] == "/bin/bash"
 
     def test_custom_profile_uses_profile_name(self, mock_all_externals, mocker):
         """Custom profile name is used in volume and container names."""
         mocker.patch("claude_sandbox.cli.ensure_volume_exists", return_value=True)
 
-        run_sandbox(["myproject"])
+        args = Args(profile="myproject")
+        run_sandbox(args)
 
-        args = mock_all_externals.call_args[0][0]
-        assert any("claude-sandbox-myproject:/home/claude" in arg for arg in args)
-        assert any("claude-sandbox-myproject-workspace:/workspace" in arg for arg in args)
-        assert any(arg == "claude-sandbox-myproject" for arg in args)  # hostname/name
-
-    def test_command_passthrough(self, mock_all_externals):
-        """Command after -- is passed to Docker."""
-        run_sandbox(["--", "/bin/bash", "-c", "echo hello"])
-
-        args = mock_all_externals.call_args[0][0]
-        # Find claude-sandbox image in args, command comes after
-        image_idx = None
-        for i, arg in enumerate(args):
-            if arg == "claude-sandbox" and i > 5:  # Skip early args
-                image_idx = i
-                break
-
-        assert image_idx is not None
-        remaining = args[image_idx + 1:]
-        assert "/bin/bash" in remaining
-        assert "-c" in remaining
-        assert "echo hello" in remaining
+        cmd = mock_all_externals.call_args[0][0]
+        assert any("claude-sandbox-myproject:/home/claude" in arg for arg in cmd)
+        assert any("claude-sandbox-myproject-workspace:/workspace" in arg for arg in cmd)
+        assert any(arg == "claude-sandbox-myproject" for arg in cmd)  # hostname/name
 
 
 class TestFunctionalWithGitHub:
@@ -104,18 +196,19 @@ class TestFunctionalWithGitHub:
 
     def test_github_flag_adds_ssh_and_git_config(self, mock_github_externals):
         """--github flag adds SSH socket and git config to Docker args."""
-        run_sandbox(["--github"])
+        args = Args(enable_github=True)
+        run_sandbox(args)
 
-        args = mock_github_externals.call_args[0][0]
+        cmd = mock_github_externals.call_args[0][0]
 
         # Check SSH socket mount
-        assert any("ssh-auth.sock" in arg for arg in args)
+        assert any("ssh-auth.sock" in arg for arg in cmd)
 
         # Check git environment variables
-        assert any("GIT_AUTHOR_NAME=Test User" in arg for arg in args)
-        assert any("GIT_AUTHOR_EMAIL=test@example.com" in arg for arg in args)
-        assert any("GIT_COMMITTER_NAME=Test User" in arg for arg in args)
-        assert any("GIT_COMMITTER_EMAIL=test@example.com" in arg for arg in args)
+        assert any("GIT_AUTHOR_NAME=Test User" in arg for arg in cmd)
+        assert any("GIT_AUTHOR_EMAIL=test@example.com" in arg for arg in cmd)
+        assert any("GIT_COMMITTER_NAME=Test User" in arg for arg in cmd)
+        assert any("GIT_COMMITTER_EMAIL=test@example.com" in arg for arg in cmd)
 
 
 class TestFunctionalDetachedMode:
@@ -141,19 +234,21 @@ class TestFunctionalDetachedMode:
 
     def test_detach_mode_uses_d_flag(self, mock_detach_externals):
         """Detached mode uses -d flag instead of -it."""
-        run_sandbox(["--detach"])
+        args = Args(detach_mode=True)
+        run_sandbox(args)
 
-        args = mock_detach_externals.call_args[0][0]
-        assert "-d" in args
-        assert "-it" not in args
+        cmd = mock_detach_externals.call_args[0][0]
+        assert "-d" in cmd
+        assert "-it" not in cmd
 
     def test_detach_mode_runs_sleep_infinity(self, mock_detach_externals):
         """Detached mode runs 'sleep infinity' as command."""
-        run_sandbox(["-d"])
+        args = Args(detach_mode=True)
+        run_sandbox(args)
 
-        args = mock_detach_externals.call_args[0][0]
-        assert "sleep" in args
-        assert "infinity" in args
+        cmd = mock_detach_externals.call_args[0][0]
+        assert "sleep" in cmd
+        assert "infinity" in cmd
 
 
 class TestFunctionalHostPorts:
@@ -178,16 +273,17 @@ class TestFunctionalHostPorts:
 
     def test_host_ports_passed_to_container(self, mock_port_externals):
         """Host ports are passed as environment variable."""
-        run_sandbox(["--host-port", "8080", "--host-port", "3000"])
+        args = Args(host_ports=[8080, 3000])
+        run_sandbox(args)
 
-        args = mock_port_externals.call_args[0][0]
+        cmd = mock_port_externals.call_args[0][0]
         # Find HOST_PORTS env var
         host_ports_found = False
-        for i, arg in enumerate(args):
-            if arg == "-e" and i + 1 < len(args) and args[i + 1].startswith("HOST_PORTS="):
+        for i, arg in enumerate(cmd):
+            if arg == "-e" and i + 1 < len(cmd) and cmd[i + 1].startswith("HOST_PORTS="):
                 host_ports_found = True
-                assert "8080" in args[i + 1]
-                assert "3000" in args[i + 1]
+                assert "8080" in cmd[i + 1]
+                assert "3000" in cmd[i + 1]
                 break
         assert host_ports_found
 
@@ -202,7 +298,7 @@ class TestFunctionalErrorCases:
         mocker.patch("builtins.print")
 
         with pytest.raises(SystemExit) as exc_info:
-            run_sandbox([])
+            run_sandbox(Args())
 
         assert exc_info.value.code == 1
 
@@ -214,19 +310,9 @@ class TestFunctionalErrorCases:
         mocker.patch("builtins.print")
 
         with pytest.raises(SystemExit) as exc_info:
-            run_sandbox([])
+            run_sandbox(Args())
 
         assert exc_info.value.code == 1
-
-    def test_exits_on_invalid_port(self, mocker, capsys):
-        """Exits with code when port is invalid."""
-        with pytest.raises(SystemExit):
-            run_sandbox(["--host-port", "invalid"])
-
-    def test_exits_on_port_out_of_range(self, mocker, capsys):
-        """Exits when port is out of range."""
-        with pytest.raises(SystemExit):
-            run_sandbox(["--host-port", "70000"])
 
 
 class TestFunctionalCombinedOptions:
@@ -258,29 +344,29 @@ class TestFunctionalCombinedOptions:
 
     def test_all_options_combined(self, mock_combined_externals):
         """All options work together correctly."""
-        run_sandbox([
-            "--github",
-            "-d",
-            "--host-port", "8080",
-            "--host-port", "3000",
-            "myproject",
-        ])
+        args = Args(
+            profile="myproject",
+            enable_github=True,
+            detach_mode=True,
+            host_ports=[8080, 3000],
+        )
+        run_sandbox(args)
 
-        args = mock_combined_externals.call_args[0][0]
+        cmd = mock_combined_externals.call_args[0][0]
 
         # Detached mode
-        assert "-d" in args
-        assert "-it" not in args
+        assert "-d" in cmd
+        assert "-it" not in cmd
 
         # GitHub
-        assert any("GIT_AUTHOR_NAME=Test User" in arg for arg in args)
+        assert any("GIT_AUTHOR_NAME=Test User" in arg for arg in cmd)
 
         # Profile
-        assert any("claude-sandbox-myproject:/home/claude" in arg for arg in args)
+        assert any("claude-sandbox-myproject:/home/claude" in arg for arg in cmd)
 
         # Host ports
-        assert any("HOST_PORTS=" in arg and "8080" in arg for arg in args)
+        assert any("HOST_PORTS=" in arg and "8080" in arg for arg in cmd)
 
         # Sleep infinity for detached
-        assert "sleep" in args
-        assert "infinity" in args
+        assert "sleep" in cmd
+        assert "infinity" in cmd
